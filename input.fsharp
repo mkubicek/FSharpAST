@@ -1,0 +1,16 @@
+module Display
+
+open System
+open System.ComponentModel
+open System.Data
+open System.Drawing 
+open System.Text
+open System.Windows.Forms
+open System.IO
+open Support.Helper
+open Printf
+
+
+let getExecutionResult sampleOption = 
+    something now;
+    9 + (10 + 2)
