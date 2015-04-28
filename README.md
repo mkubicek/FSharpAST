@@ -1,7 +1,7 @@
 # FSharpAST
 Matching output of the F# parser with an independent F# parser implemented in Smalltalk, PetitParser (http://smalltalkhub.com/#!/~MilanKubicek/FSharpGrammar)
 
-Depends on MacOSX Xamarin installation with working F# mono installation.
+Depends on MacOSX Xamarin installation including F# compiler.
 
 ###Some MacOSX installation notes:###
  * Get FSharp working http://fsharp.org/use/mac/
