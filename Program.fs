@@ -1,11 +1,8 @@
-﻿// Learn more about F# at http://fsharp.net
-// See the 'F# Tutorial' project for more help.
-open System
+﻿open System
 open System.IO
 open GetAST
 open Tokenizer
 open Microsoft.FSharp.Compiler.SourceCodeServices
-
 
 let visitAST () =
     let filepath = "input.fsharp"
@@ -13,12 +10,9 @@ let visitAST () =
 
     // File name in Unix format
     let file = "/home/user/dummy.fsx"
-
     // Get the AST of sample F# code
     let tree = GetAST.getUntypedTree(file, input) 
-
     let test = GetAST.extractImplementationFileDetails tree
-
 
     printf "%s" GetAST.output
 
@@ -55,12 +49,6 @@ let tokenize () =
     lines
     |> List.ofSeq
     |> tokenizeLines 0L 1
-
-    ///let lines = File.ReadAllText(filepath).Split('\r','\n')
-
-    ///lines
-    ///|> List.ofSeq
-    ///|> Tokenizer.tokenizeLines 0L 1
 
 [<EntryPoint>]
 let main argv = 

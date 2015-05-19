@@ -23,8 +23,7 @@ let getUntypedTree (file, input) =
   match untypedRes.ParseTree with
   | Some tree -> tree
   | None -> failwith "Something went wrong during parsing!"
-
-
+ 
 /// Walk over all module or namespace declarations 
 let rec visitModulesAndNamespaces modulesOrNss =
   for moduleOrNs in modulesOrNss do
@@ -88,7 +87,9 @@ and visitExpression = function
     addToOutput "Something unrecognized"
     () /// printfn " - not supported expression: %A" expr
 
-
+and visitSynType synType =
+    match synType with
+    | _ -> ()
 
 and visitSynExpr synExpr = 
     addToOutput ("type" ^ synExpr.GetType().Name)
@@ -101,12 +102,37 @@ and visitSynExpr synExpr =
     | SynExpr.Const(i1,i2) ->
         addToOutput ("Const" ^ i1.ToString())
     | SynExpr.Typed(i1,i2,i3) ->
+        visitSynExpr i1
+        visitSynType i2
         addToOutput "Typed"
     | SynExpr.Tuple(i1,i2,i3) ->
         addToOutput "Paren"
     | SynExpr.ArrayOrList(i1,i2,i3) ->
         addToOutput "ArrayOrList"
     | SynExpr.Record(i1,i2,i3,i4) ->
+        //SynExpr.Record(
+        // (baseType, baseCtorArgs, mBaseCtor, sepAfterBase, mInherits) optional, 
+        // (copyExpr, sepAfterCopyExpr) optional, 
+        // (recordFieldName, fieldValue, sepAfterField) list, 
+        // mWholeExpr
+        //)
+        match i1 with
+        | Some i1-> 
+            match i1 with
+            | (synType1,synExpr1,x3,x4,x5) -> visitSynExpr synExpr1
+        | None -> ()
+
+        match i2 with
+        | Some i2-> 
+            match i2 with
+            | (synExpr2,blockSep) -> visitSynExpr synExpr2
+        | None -> ()
+
+        // { f1=e1; ...; fn=en }
+        for ((recordFieldName, rangeList), synExpr3, blockSeperator) in i3 do
+            match synExpr3 with
+            | Some synExpr3 -> visitSynExpr synExpr3
+            | None -> ()
         addToOutput "Record"
     | SynExpr.New(i1,i2,i3,i4) ->
         addToOutput "New"
@@ -122,6 +148,7 @@ and visitSynExpr synExpr =
         addToOutput "ArrayOrListOfSeqExpr"
     | SynExpr.CompExpr(i1,i2,i3,i4) ->
         addToOutput "CompExpr"
+        visitSynExpr i3
     | SynExpr.Lambda(i1,i2,i3,i4,i5) ->
         addToOutput "Lambda"
     | SynExpr.MatchLambda(i1,i2,i3,i4,i5) ->
@@ -139,7 +166,11 @@ and visitSynExpr synExpr =
         visitSynExpr synExpr2 // ??
     | SynExpr.TypeApp(i1,i2,i3,i4,i5,i6,i7) ->
         addToOutput "TypeApp"
-    | SynExpr.LetOrUse(i1,i2,i3,i4,i5) ->
+    | SynExpr.LetOrUse(i1,i2,synBindings,i4,i5) ->
+        for binding in synBindings do
+            let (Binding(access, kind, inlin, mutabl, attrs, xmlDoc, data, pat, retInfo, body, m, sp)) = binding
+            visitSynExpr body
+        visitSynExpr i4
         addToOutput "LetOrUse"
     | SynExpr.TryWith(i1,i2,i3,i4,i5,i6,i7) ->
         addToOutput "TryWith"
@@ -215,6 +246,8 @@ and visitDeclarations decls =
           visitSynExpr body
 
     | SynModuleDecl.DoExpr(_,expr,_) -> visitExpression expr
+    | SynModuleDecl.Open(longIdent,range) ->
+        ()
     | _ -> () /// printfn " - not supported declaration: %A" declaration
 
 and extractImplementationFileDetails tree =
@@ -227,3 +260,4 @@ and extractImplementationFileDetails tree =
         visitModulesAndNamespaces modules
         //printf "%s" output
         | _ -> failwith "F# Interface file (*.fsi) not supported."
+

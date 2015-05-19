@@ -12,5 +12,32 @@ open Printf
 
 
 let getExecutionResult sampleOption = 
-    something now;
-    9 + (10 + 2)
+	let rec keywords = 
+   		[  "abstract";"and";"as";"assert"; "asr";
+      	"begin"; "class"; "default";
+      	"delegate"; "do";"done";
+      	"downcast";"downto"; "use";
+      	"elif";"else";"end";"exception";
+     	 "false";"finally";"for";"fun";"function";
+      	"if";"in"; "inherit"; "inline";
+      	"interface"; "land"; "lazy"; "let";
+     	 "lor"; "lsl";
+     	 "lsr"; "lxor";
+      	"match"; "member";"mod";"module";
+     	 "mutable";"namespace"; "new";"null"; "of";"object";"open";
+     	 "or"; "override";
+      	"property";"rec";"static";"struct"; "sig";
+      	"then";"to";"true";"try";
+      	"type";"upcast"; "val";"when";
+      	"while";"with";"="; ":?"; "->"; "#light";
+      	"select";"where";"join";"groupJoin"  ]
+    and visitSynExpr synExpr = 3+3 in x
+	// 3+3 : int
+	//[ { myRecord2 with Y = 100} ]
+	//[ a; b; c; d]
+	//(somecall).Items(e1) <- e2
+	// { myRecord2 with Y = 100}
+	//{ if something then something } ; { something }
+	//let x = 1 in
+    //something now;
+    //9 + (10 + 2)
