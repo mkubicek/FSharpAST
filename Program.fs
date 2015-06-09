@@ -14,7 +14,7 @@ let visitAST () =
     let tree = GetAST.getUntypedTree(file, input) 
     let test = GetAST.extractImplementationFileDetails tree
 
-    printf "%s" GetAST.output
+    printf "%s" GetAST.astOutput
 
 let tokenize () = 
     //let tokenizer = sourceTok.CreateLineTokenizer("let answer=42")

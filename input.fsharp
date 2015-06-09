@@ -1,43 +1,78 @@
-module Display
-
+namespace Microsoft.Practices.ParallelGuideSamples.ADash
+#nowarn "40"
 open System
-open System.ComponentModel
-open System.Data
-open System.Drawing 
-open System.Text
-open System.Windows.Forms
-open System.IO
-open Support.Helper
-open Printf
+open System.Collections.Generic
+open System.Linq
+open System.Threading
+open System.Threading.Tasks
+open Microsoft.Practices.ParallelGuideSamples.ADash.BusinessObjects
+open Microsoft.Practices.ParallelGuideSamples.Utilities
+open Microsoft.Practices.ParallelGuideSamples.ADash.AnalysisModule
+open FSharp.Control
 
+type AnalysisEngine() = begin
+  interface IAnalysisEngine with 
+      member x.DoSequentialAnalysis2() =
+            let rec engine = 
+              { new AnalysisProcess() with
+                  member x.Start() = Task.Factory.StartNew(analysis) |> ignore
+                  member x.TryCancel() = () end }
 
-let getExecutionResult sampleOption = 
-	let rec keywords = 
-   		[  "abstract";"and";"as";"assert"; "asr";
-      	"begin"; "class"; "default";
-      	"delegate"; "do";"done";
-      	"downcast";"downto"; "use";
-      	"elif";"else";"end";"exception";
-     	 "false";"finally";"for";"fun";"function";
-      	"if";"in"; "inherit"; "inline";
-      	"interface"; "land"; "lazy"; "let";
-     	 "lor"; "lsl";
-     	 "lsr"; "lxor";
-      	"match"; "member";"mod";"module";
-     	 "mutable";"namespace"; "new";"null"; "of";"object";"open";
-     	 "or"; "override";
-      	"property";"rec";"static";"struct"; "sig";
-      	"then";"to";"true";"try";
-      	"type";"upcast"; "val";"when";
-      	"while";"with";"="; ":?"; "->"; "#light";
-      	"select";"where";"join";"groupJoin"  ]
-    and visitSynExpr synExpr = 3+3 in x
-	// 3+3 : int
-	//[ { myRecord2 with Y = 100} ]
-	//[ a; b; c; d]
-	//(somecall).Items(e1) <- e2
-	// { myRecord2 with Y = 100}
-	//{ if something then something } ; { something }
-	//let x = 1 in
-    //something now;
-    //9 + (10 + 2)
+            and analysis() =
+                let nyseData = loadNyseData() in
+                engine.TriggerLoadNyseData(nyseData);
+                let nasdaqData = loadNasdaqData() in
+                engine.TriggerLoadNasdaqData(nasdaqData);
+
+                let mergedMarketData = mergeMarketData [ nyseData; nasdaqData ] in
+                engine.TriggerMergeMarketData(mergedMarketData);
+                let normalizedMarketData = normalizeData mergedMarketData in
+                engine.TriggerNormalizeMarketData(normalizedMarketData);
+                let analyzedStockData = analyzeData normalizedMarketData in
+                engine.TriggerAnalyzeMarketData(analyzedStockData);
+            
+                let fedHistoricalData = loadFedHistoricalData() in
+                engine.TriggerLoadFedHistoricalData(fedHistoricalData);
+                let normalizedHistoricalData = normalizeData fedHistoricalData in
+                engine.TriggerNormalizeHistoricalData(normalizedHistoricalData);
+                let analyzedHistoricalData = analyzeData normalizedHistoricalData in
+                engine.TriggerAnalyzeHistoricalData(analyzedHistoricalData);
+            
+                let modeledMarketData = runModel analyzedStockData in
+                engine.TriggerModelMarketData(modeledMarketData);
+                let modeledHistoricalData = runModel analyzedHistoricalData in
+                engine.TriggerModelHistoricalData(modeledHistoricalData);
+                let recommendation = compareModels [ modeledMarketData; modeledHistoricalData ] in
+                engine.TriggerCompareModels(Some recommendation) in
+            engine
+
+        member x.DoAsyncAnalysis() =
+            let cts = new CancellationTokenSource() in
+            let rec engine = 
+              { new AnalysisProcess() with
+                  member x.Start() = 
+                      Async.Start(compare, cancellationToken = cts.Token)
+                  member x.TryCancel() = cts.Cancel() end } 
+            and marketModel = async {
+                let! nyse = 
+                  asyncLoadNyseData() 
+                  |> Async.WithResult engine.TriggerLoadNyseData |> Async.StartChild in
+                let! nasdaq = 
+                  asyncLoadNasdaqData() 
+                  |> Async.WithResult engine.TriggerLoadNasdaqData |> Async.StartChild in
+
+                let! nyseData = nyse in
+                let! nasdaqData = nasdaq in
+                let merged = mergeMarketData [ nyseData; nasdaqData ] in
+                engine.TriggerMergeMarketData(merged);
+
+                let! normalized = asyncNormalizeData merged in
+                engine.TriggerNormalizeMarketData(normalized);
+                let! analyzed = asyncAnalyzeData normalized  in
+                engine.TriggerAnalyzeMarketData(analyzed);
+                let! res = asyncRunModel analyzed in
+                engine.TriggerModelMarketData(res);
+                return res } in
+            engine
+end
+end
