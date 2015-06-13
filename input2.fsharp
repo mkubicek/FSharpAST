@@ -12,7 +12,10 @@ open Printf
 
 
 let getExecutionResult sampleOption = 
-	{ 1 + 2; 1 + 2 }
+	let rec engine = 5
+    and analysis() = 
+     let nyseData = loadNyseData() in
+    engine
 	// (test + test).something
 	// 3+3 : int
 	//[ { myRecord2 with Y = 100} ]

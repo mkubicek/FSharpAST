@@ -115,9 +115,7 @@ and visitSynExpr synExpr =
         visitSynType i2
         addToOutput "Typed"
     | SynExpr.Tuple(synExprList,i2,i3) ->
-        addToOutput "tuple"
-        for synEx in synExprList do
-           visitSynExpr synEx
+        toAst "PFSTuple"
     | SynExpr.ArrayOrList(i1,i2,i3) ->
         addToOutput "ArrayOrList"
     | SynExpr.Record(i1,i2,i3,i4) ->
@@ -155,17 +153,19 @@ and visitSynExpr synExpr =
     | SynExpr.While(i1,i2,i3,i4) ->
         addToOutput "While"
     | SynExpr.For(i1,i2,i3,i4,i5,i6,i7) ->
-        addToOutput "For"
+        toAst "PFSFor("
+        visitSynExpr i6
+        toAst ")"
     | SynExpr.ForEach(i1,i2,i3,i4,i5,i6,i7) ->
-        addToOutput "ForEach"
+        toAst "PFSForEach("
+        visitSynExpr i6
+        toAst ")"
     | SynExpr.ArrayOrListOfSeqExpr(i1,i2,i3) ->
         toAst "PFSArrayOrListOfSeqExpr("
         visitSynExpr i2
         addToOutput ")"
     | SynExpr.CompExpr(i1,i2,i3,i4) ->
-        toAst "PFSCompExpr("
-        visitSynExpr i3
-        toAst ")"
+        toAst "PFSCompExpr"
     | SynExpr.Lambda(i1,i2,i3,i4,i5) ->
         addToOutput "Lambda"
     | SynExpr.MatchLambda(i1,i2,i3,i4,i5) ->
@@ -173,7 +173,9 @@ and visitSynExpr synExpr =
     | SynExpr.Match(i1,i2,i3,i4,i5) ->
         addToOutput "Match"
     | SynExpr.Do(i1,i2) ->
-        addToOutput "Do"
+        toAst "PFSDo("
+        visitSynExpr i1
+        toAst ")"
     | SynExpr.Assert(i1,i2) ->
         addToOutput "Assert"
     | SynExpr.App(i1,i2,synExpr1,synExpr2,i5) ->
@@ -219,8 +221,11 @@ and visitSynExpr synExpr =
         else
             toAst (i1.ToString())
         toAst ")"
-    | SynExpr.LongIdent(i1,i2,i3,i4) ->
-        addToOutput "LongIdent"
+    | SynExpr.LongIdent(i1,longIdentWithDots,i3,i4) ->
+        toAst "PFSLongIdent("
+        let (LongIdentWithDots(a1,a2)) = longIdentWithDots
+        System.String.Join(".",a1) |> toAst
+        toAst ")"
     | SynExpr.LongIdentSet(i1,i2,i3) ->
         addToOutput "LongIdentSet"
     | SynExpr.DotGet(i1,i2,i3,i4) ->
@@ -259,6 +264,9 @@ and visitSynExpr synExpr =
         addToOutput "LetOrUseBang"
     | SynExpr.DoBang(i1,i2) ->
         addToOutput "DoBang"
+    | SynExpr.ArbitraryAfterError(i1,i2) ->
+        toAst "PARSING_ERROR:_
+        ARBITRARY_AFTER_ERROR"
     | expr -> ()
 
 //and visitConst synConst = function
@@ -281,7 +289,11 @@ and visitDeclarations decls =
           if bindings.Length <> letcounter then
             toAst ","
         toAst ")"
-    | SynModuleDecl.DoExpr(_,expr,_) -> visitExpression expr
+    | SynModuleDecl.DoExpr(i1,expr,i3) -> 
+        // expr is of type SynExpr.Do, wrap it into SynModuleDecl.DoExpr anyway
+        toAst "PFSDoExpr("
+        visitSynExpr expr
+        toAst ")"
     | SynModuleDecl.Open(longIdent,range) ->
         toAst "PFSOpen"
     | SynModuleDecl.Types(synTypeDefnList,range) ->
