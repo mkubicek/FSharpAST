@@ -1,13 +1,12 @@
 # FSharpAST
-Matching output of the F# parser with an independent F# parser implemented in Smalltalk, PetitParser (http://smalltalkhub.com/#!/~MilanKubicek/FSharpGrammar)
+Extract textual encoded AST from F# code to learn more about F# AST structure and validate independent F# parser implementations like http://smalltalkhub.com/#!/~MilanKubicek/FSharpGrammar
 
-Depends on MacOSX Xamarin installation including F# compiler.
+Depends on a MacOSX Xamarin installation including F# compiler:
 
-###Some MacOSX installation notes:###
- * Get FSharp working http://fsharp.org/use/mac/
- * Get the Xamarin IDE http://xamarin.com/download
+### MacOSX installation notes:###
+ * Make FSharp working http://fsharp.org/use/mac/
+ * Install the Xamarin IDE http://xamarin.com/download
  * Make FSharp working in Xamarin http://developer.xamarin.com/guides/cross-platform/fsharp/fsharp_support_overview/
- * ~~Get the F# compiler services nuget http://fsharp.github.io/FSharp.Compiler.Service/~~ already included in project
 
 ###..on Linux? some installation hints:###
 

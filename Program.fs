@@ -1,58 +1,72 @@
 ﻿open System
 open System.IO
 open GetAST
-open Tokenizer
 open Microsoft.FSharp.Compiler.SourceCodeServices
+
+let rec getAllFilePaths dir pattern =
+    seq { yield! Directory.EnumerateFiles(dir, pattern)
+          for d in Directory.EnumerateDirectories(dir) do
+          yield! getAllFilePaths d pattern }
+
+let IsSubLet (letDecl : LetDeclaration) (list : List<LetDeclaration>) = 
+    List.exists (fun (elem : LetDeclaration) -> (elem.FileName = letDecl.FileName) 
+                                                && (elem.StartLine <= letDecl.StartLine) 
+                                                && (elem.EndLine >= letDecl.EndLine)
+                                                && (elem.StartColumn <= letDecl.StartColumn)
+                                                && (elem.EndColumn >= letDecl.EndColumn)) list
+
+let mutable AllTopLevelLets : List<LetDeclaration> = List.empty<LetDeclaration>
 
 let visitAST () =
     let filepath = "input.fsharp"
     let input = File.ReadAllText(filepath)
 
-    // File name in Unix format
-    let file = "/home/user/dummy.fsx"
     // Get the AST of sample F# code
-    let tree = GetAST.getUntypedTree(file, input) 
-    let test = GetAST.extractImplementationFileDetails tree
+    let tree = GetAST.getUntypedTree(filepath,"/home/user/dummy.fsx", input) 
+    let test = GetAST.traverseTree tree
 
     printf "%s" GetAST.astOutput
 
-let tokenize () = 
-    //let tokenizer = sourceTok.CreateLineTokenizer("let answer=42")
+let extractLetModules filePath =
+    GetAST.reset ()
 
-    /// Tokenize a single line of F# code
-    let rec tokenizeLine (tokenizer:FSharpLineTokenizer) state =
-      match tokenizer.ScanToken(state) with
-      | Some tok, state ->
-          // Print token name
-          printf "%s " tok.TokenName
-          // Tokenize the rest, in the new state
-          tokenizeLine tokenizer state
-      | None, state -> state
+    let input = File.ReadAllText(filePath)
+    let test = GetAST.traverseTree (GetAST.getUntypedTree(filePath, filePath, input))
 
-    let lines = """
-      let x = 
-         let y = 2
-         x + y """.Split('\r','\n')
+    for letDecl in GetAST.LetDeclarations do
+        if (IsSubLet letDecl AllTopLevelLets) = false then
+            AllTopLevelLets <- letDecl :: AllTopLevelLets
+    ()
 
-    /// Print token names for multiple lines of code
-    let rec tokenizeLines state count lines = 
-      match lines with
-      | line::lines ->
-          // Create tokenizer & tokenize single line
-          printfn "\nLine %d" count
-          let tokenizer = sourceTok.CreateLineTokenizer(line)
-          let state = tokenizeLine tokenizer state
-          // Tokenize the rest using new state
-          tokenizeLines state (count+1) lines
-      | [] -> ()
+let extractFromAll () =
+    let fs = getAllFilePaths "/Users/mkubicek/Dropbox/Uni/FSharp/FSharpDemoCode" "*.fs"
+    let fsx = getAllFilePaths "/Users/mkubicek/Dropbox/Uni/FSharp/FSharpDemoCode" "*.fsx"
+    let allFSharpFilePaths = Seq.append fs fsx
+    for filePath in allFSharpFilePaths do extractLetModules(filePath)
 
-    lines
-    |> List.ofSeq
-    |> tokenizeLines 0L 1
+    let mutable outputString = ""
+
+    for topLevelLet in (List.sortBy (fun (elem : LetDeclaration) -> elem.SourceCode.Length) AllTopLevelLets) do
+        outputString <- outputString + "File: #(" + topLevelLet.FileName + ")#" + Environment.NewLine
+        outputString <- outputString + "Code: #(" + topLevelLet.SourceCode + ")#" + Environment.NewLine
+        outputString <- outputString + "AST: #(" + topLevelLet.ASTRep + ")#" + Environment.NewLine
+        outputString <- outputString + "ModuleLevel: #(" + topLevelLet.IsModuleLevel.ToString() + ")#" + Environment.NewLine
+        outputString <- outputString + Environment.NewLine
+
+    File.WriteAllText("out.txt", outputString)
+    ()
 
 [<EntryPoint>]
 let main argv = 
     visitAST ()
-   
+    //extractFromAll()
     0 // return an integer exit code
+
+
+
+
+
+
+
+
 

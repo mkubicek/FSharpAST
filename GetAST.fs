@@ -1,7 +1,25 @@
 ﻿module GetAST
+open System.IO
 open Microsoft.FSharp.Compiler.SourceCodeServices
 open Microsoft.FSharp.Compiler.Ast
+open Microsoft.FSharp.Compiler.Range
 open Microsoft.FSharp.Quotations.Patterns
+
+type LetDeclaration = struct
+   val SourceCode : string (* holds the piece of code *)
+   val ASTRep : string (* represents the AST of the source code *)
+   val FileName : string
+   val StartColumn : int
+   val EndColumn : int
+   val StartLine : int
+   val EndLine : int
+   val IsModuleLevel : bool
+
+   new (sourceCode, astRep, fileName, startColumn, endColumn, startLine, endLine, isModuleLevel) =
+      {SourceCode = sourceCode; ASTRep = astRep; FileName = fileName; StartColumn = startColumn; EndColumn = endColumn; StartLine = startLine; EndLine = endLine; IsModuleLevel = isModuleLevel}
+end
+
+let mutable LetDeclarations = List.empty<LetDeclaration>
 
 // method to concatenate strings
 let (^) l r = sprintf "%s%s" l r
@@ -10,22 +28,58 @@ let (^) l r = sprintf "%s%s" l r
 let checker = FSharpChecker.Create()
 
 let mutable output = ""
+
+// holds the filename of the current source code file
+let mutable Filename = ""
+
+// holds the current source code file
+let mutable InputSourceLines = [| "" |]
+
+// holds the ast represantation of a whole source file
 let mutable astOutput = ""
 
+// holds the ast representation of the current let declaration
+let mutable currentLet = ""
+
 let ignore = "ignore"
+
+let GetStringFromLines (lines:string[], startLine:int, endLine:int, startColumn:int, endColumn:int) =
+    let mutable output = [| |]
+    for i = 0 to lines.Length - 1 do
+        if i >=
+         (startLine - 1)
+         then
+            if i = (startLine - 1) then
+                output <- Array.append output [| lines.[i].Substring(startColumn) |]
+            else if i = (endLine - 1) then
+                output <- Array.append output [| lines.[i].Substring(0, endColumn) |]
+            else if i < (endLine - 1) then
+                output <- Array.append output [| lines.[i] |] 
+            else 
+                ()
+    output
 
 let addToOutput str =
     output <- output + str + "\n"
 
+let reset () =
+    output <- ""
+    astOutput <- ""
+    LetDeclarations <- List.empty<LetDeclaration>
+
 let toAst str =
     astOutput <- astOutput + str
+    currentLet <- currentLet + str
 
-let getUntypedTree (file, input) = 
+
+let getUntypedTree (filePath, filePathForParser, input) = 
+  InputSourceLines <- File.ReadAllLines(filePath)
+  Filename <- filePath
   // Get compiler options for a single script file
-  let checkOptions = checker.GetProjectOptionsFromScript(file, input) |> Async.RunSynchronously
+  let checkOptions = checker.GetProjectOptionsFromScript((*file*) "/dev/null", input) |> Async.RunSynchronously
   // Run the first phase (untyped parsing) of the compiler
-
-  let untypedRes = checker.ParseFileInProject(file, input, checkOptions) |> Async.RunSynchronously
+ 
+  let untypedRes = checker.ParseFileInProject(filePathForParser, input, checkOptions) |> Async.RunSynchronously
   match untypedRes.ParseTree with
   | Some tree -> tree
   | None -> failwith "Something went wrong during parsing!"
@@ -35,70 +89,11 @@ let rec visitModulesAndNamespaces modulesOrNss =
   for moduleOrNs in modulesOrNss do
     let (SynModuleOrNamespace(lid, isModule, decls, xmlDoc, attribs, synAccess, m)) = moduleOrNs
     //printfn "Namespace or module: %A" lid
-    toAst "PFSSynModuleOrNamespace("
-    visitDeclarations decls
-    toAst ")"
-
-/// Walk over a pattern - this is for example used in 
-/// let <pat> = <expr> or in the 'match' expression
-and visitPattern = function
-  | SynPat.Wild(_) -> printfn "  .. underscore pattern"
-  | SynPat.Named(pat, name, _, _, _) ->
-      visitPattern pat
-      //printfn "  .. named as '%s'" name.idText
-//| SynPat.LongIdent(LongIdentWithDots(ident, _), _, _, _, _, _) ->
-      //printfn "  identifier: %s" (String.concat "." [ for i in ident -> i.idText ])
-  | pat -> () /// printfn " - not supported pattern: %A" pat
-
-/// Walk over an expression
-and visitExpression = function
-  | SynExpr.IfThenElse(cond, trueBranch, falseBranchOpt, _, _, _, _) ->
-      addToOutput "IfThenElse"
-      addToOutput "("
-      visitExpression trueBranch
-      addToOutput ")"
-      addToOutput "("
-      falseBranchOpt |> Option.iter visitExpression
-      addToOutput ")"
-      //printfn "Conditional: %A" cond
-      ///visitExpression cond
-      ///visitExpression trueBranch
-      ///falseBranchOpt |> Option.iter visitExpression 
-
-  | SynExpr.LetOrUse(_, _, bindings, body, range) ->
-      addToOutput "LetDeclaration"
-      let mutable counter = 0
-
-      if bindings.Length > 0 then
-          addToOutput "("
-      for binding in bindings do
-        let (Binding(access, kind, inlin, mutabl, attrs, xmlDoc, data, pat, retInfo, body, m, sp)) = binding
-        visitExpression body
-        if counter <> 0 then
-            addToOutput ","
-        if bindings.Length = counter + 1 then
-            addToOutput ")"
-        //visitPattern pat 
-        //visitExpression body
-        counter <- counter + 1
-      //printfn "And the following body:"
-      visitExpression body
-  | SynExpr.Const(con, _) -> 
-      addToOutput "Const"
-      // printfn "Const %A" con
-  | SynExpr.Do(expr, range) -> 
-      addToOutput "Const"
-  | SynExpr.Paren(expr, range, range2, range3) -> 
-      visitExpression expr
-      addToOutput "Paren"
-  | expr -> 
-    addToOutput "Something unrecognized"
-    () /// printfn " - not supported expression: %A" expr
+    toAst "PFSSynModuleOrNamespace("; visitDeclarations decls; toAst ")"
 
 and visitSynType synType =
     match synType with
     | _ -> ()
-
 and visitSynExpr synExpr = 
     addToOutput ("type" ^ synExpr.GetType().Name)
     match synExpr with
@@ -107,36 +102,30 @@ and visitSynExpr synExpr =
         visitSynExpr synExpr1
         toAst ")"
     | SynExpr.Quote(i1,i2,i3,i4,i5) ->
-        addToOutput "Quote"
+        toAst "TODO:Quote"
     | SynExpr.Const(i1,i2) ->
         toAst "PFSConst"
     | SynExpr.Typed(i1,i2,i3) ->
+        toAst "TODO:Typed"
         visitSynExpr i1
         visitSynType i2
         addToOutput "Typed"
     | SynExpr.Tuple(synExprList,i2,i3) ->
         toAst "PFSTuple"
     | SynExpr.ArrayOrList(i1,i2,i3) ->
-        addToOutput "ArrayOrList"
+        toAst "ArrayOrList"
     | SynExpr.Record(i1,i2,i3,i4) ->
-        //SynExpr.Record(
-        // (baseType, baseCtorArgs, mBaseCtor, sepAfterBase, mInherits) optional, 
-        // (copyExpr, sepAfterCopyExpr) optional, 
-        // (recordFieldName, fieldValue, sepAfterField) list, 
-        // mWholeExpr
-        //)
+        toAst "TODO:Record"
         match i1 with
         | Some i1-> 
             match i1 with
             | (synType1,synExpr1,x3,x4,x5) -> visitSynExpr synExpr1
         | None -> ()
-
         match i2 with
         | Some i2-> 
             match i2 with
             | (synExpr2,blockSep) -> visitSynExpr synExpr2
         | None -> ()
-
         // { f1=e1; ...; fn=en }
         for ((recordFieldName, rangeList), synExpr3, blockSeperator) in i3 do
             match synExpr3 with
@@ -151,7 +140,9 @@ and visitSynExpr synExpr =
         toAst "PFSObjExpr("
         toAst ")"
     | SynExpr.While(i1,i2,i3,i4) ->
-        addToOutput "While"
+        toAst "PFSWhile("
+        visitSynExpr i3
+        toAst ")"
     | SynExpr.For(i1,i2,i3,i4,i5,i6,i7) ->
         toAst "PFSFor("
         visitSynExpr i6
@@ -161,24 +152,33 @@ and visitSynExpr synExpr =
         visitSynExpr i6
         toAst ")"
     | SynExpr.ArrayOrListOfSeqExpr(i1,i2,i3) ->
-        toAst "PFSArrayOrListOfSeqExpr("
-        visitSynExpr i2
-        addToOutput ")"
+        toAst "PFSArrayOrListOfSeqExpr" // i2 just holds a CompExpr. Not of interest.
     | SynExpr.CompExpr(i1,i2,i3,i4) ->
         toAst "PFSCompExpr"
     | SynExpr.Lambda(i1,i2,i3,i4,i5) ->
-        addToOutput "Lambda"
+        toAst "PFSLambda("
+        visitSynExpr i4
+        toAst ")"
     | SynExpr.MatchLambda(i1,i2,i3,i4,i5) ->
         addToOutput "MatchLambda"
     | SynExpr.Match(i1,i2,i3,i4,i5) ->
-        addToOutput "Match"
+        toAst "PFSMatch("
+        let mutable counter = 0
+        for synMatchClause in i3 do
+            let (Clause(SynPat, SynExprOpt, SynExpr, range,SequencePointInfoForTarget)) = synMatchClause
+            visitSynExpr SynExpr
+            counter <- counter + 1
+            if i3.Length <> counter then
+              toAst ","
+        toAst ")"
     | SynExpr.Do(i1,i2) ->
         toAst "PFSDo("
         visitSynExpr i1
         toAst ")"
     | SynExpr.Assert(i1,i2) ->
-        addToOutput "Assert"
+        toAst "PFSAssert"
     | SynExpr.App(i1,i2,synExpr1,synExpr2,i5) ->
+
         // 1+2 becomes App(App(+,1),2)
         toAst "PFSApp("
         visitSynExpr synExpr1
@@ -187,7 +187,9 @@ and visitSynExpr synExpr =
         toAst ")"
     | SynExpr.TypeApp(i1,i2,i3,i4,i5,i6,i7) ->
         addToOutput "TypeApp"
-    | SynExpr.LetOrUse(i1,i2,synBindings,i4,i5) ->
+
+    | SynExpr.LetOrUse(i1,i2,synBindings,i4, i5) ->
+        let lengthAstOutputBefore = astOutput.Length
         toAst "PFSLetOrUse("
         let mutable counter = 0
         for binding in synBindings do
@@ -199,10 +201,15 @@ and visitSynExpr synExpr =
         toAst ";"
         visitSynExpr i4
         toAst ")"
+
+        let extractedLines = GetStringFromLines (InputSourceLines, i5.StartLine, i5.EndLine, i5.StartColumn, i5.EndColumn)
+        let myLet = new LetDeclaration((extractedLines |> String.concat System.Environment.NewLine), astOutput.Substring(lengthAstOutputBefore), Filename, i5.StartColumn, i5.EndColumn, i5.StartLine, i5.EndLine, false)
+        LetDeclarations <- myLet :: LetDeclarations
+
     | SynExpr.TryWith(i1,i2,i3,i4,i5,i6,i7) ->
-        addToOutput "TryWith"
+        toAst "TryWith"
     | SynExpr.TryFinally(i1,i2,i3,i4,i5) ->
-        addToOutput "TryFinally"
+        toAst "TryFinally"
     | SynExpr.Lazy(i1,i2) ->
         addToOutput "Lazy"
     | SynExpr.Sequential(i1,i2,synExpr1,synExpr2,i5) ->
@@ -211,8 +218,11 @@ and visitSynExpr synExpr =
         toAst ","
         visitSynExpr synExpr2
         toAst ")"
-    | SynExpr.IfThenElse(i1,i2,i3,i4,i5,i6,i7) ->
-        addToOutput "IfThenElse"
+    | SynExpr.IfThenElse(i1,ifBranch,elseBranchOpt,i4,i5,i6,i7) ->
+        toAst "PFSIfThenElse("
+        visitSynExpr ifBranch
+        elseBranchOpt |> Option.iter (toAst ","; visitSynExpr)
+        toAst ")"
     | SynExpr.Ident(i1) ->
         toAst "PFSIdent("
         let name = i1.ToString() in
@@ -227,7 +237,7 @@ and visitSynExpr synExpr =
         System.String.Join(".",a1) |> toAst
         toAst ")"
     | SynExpr.LongIdentSet(i1,i2,i3) ->
-        addToOutput "LongIdentSet"
+        toAst "PFSLongIdentSet"
     | SynExpr.DotGet(i1,i2,i3,i4) ->
         addToOutput "DotGet"
     | SynExpr.DotIndexedGet(i1,i2,i3,i4) ->
@@ -265,13 +275,12 @@ and visitSynExpr synExpr =
     | SynExpr.DoBang(i1,i2) ->
         addToOutput "DoBang"
     | SynExpr.ArbitraryAfterError(i1,i2) ->
-        toAst "PARSING_ERROR:_
-        ARBITRARY_AFTER_ERROR"
-    | expr -> ()
-
-//and visitConst synConst = function
-//    | int16(val1) -> addToOutput val1
-//    | _ -> ()
+        toAst "PARSING_ERROR:ARBITRARY_AFTER_ERROR"
+    | SynExpr.FromParseError(i1,i2) ->
+        toAst "PARSING ERROR"
+    | expr -> 
+        toAst "UNKNOWN"
+        ()
     
 /// Walk over a list of declarations in a module. This is anything that you can write as a top-level inside module (let bindings,nested modules, type declarations etc.)
 and visitDeclarations decls =
@@ -279,7 +288,8 @@ and visitDeclarations decls =
   for declaration in decls do
     match declaration with
     | SynModuleDecl.ModuleAbbrev(identifier,longidentifier,range) -> ()
-    | SynModuleDecl.Let(isRec, bindings, range) ->
+    | SynModuleDecl.Let(isRec, bindings, range) -> (* module level let *)
+        let lengthAstOutputBefore = astOutput.Length
         let mutable letcounter = 0
         toAst "PFSLet("
         for binding in bindings do
@@ -289,27 +299,34 @@ and visitDeclarations decls =
           if bindings.Length <> letcounter then
             toAst ","
         toAst ")"
-    | SynModuleDecl.DoExpr(i1,expr,i3) -> 
-        // expr is of type SynExpr.Do, wrap it into SynModuleDecl.DoExpr anyway
-        toAst "PFSDoExpr("
-        visitSynExpr expr
-        toAst ")"
+
+        let extractedLines = GetStringFromLines (InputSourceLines, range.StartLine, range.EndLine, range.StartColumn, range.EndColumn)
+        let myLet = new LetDeclaration((extractedLines |> String.concat System.Environment.NewLine), astOutput.Substring(lengthAstOutputBefore), Filename, range.StartColumn, range.EndColumn, range.StartLine, range.EndLine, true)
+        LetDeclarations <- myLet :: LetDeclarations
+
     | SynModuleDecl.Open(longIdent,range) ->
         toAst "PFSOpen"
     | SynModuleDecl.Types(synTypeDefnList,range) ->
-        toAst "PFSTypes("
+        toAst "PFSTypes"
         for synTypeDefn in synTypeDefnList do
             let(TypeDefn(synComponentInfo, synTypeDefnRepr, _, range)) = synTypeDefn
             match synTypeDefnRepr with
             | ObjectModel(synTypeDefnKind, synMemberDefns, range) -> 
+                toAst "("
                 visitMemberDefinitions synMemberDefns
+                toAst ")"
             | Simple(synTypeDefnSimpleRepr, range) -> ()
-        toAst ")"
+        
     | SynModuleDecl.HashDirective(parsedHashDirective,range) ->
-        toAst "PFSHashDirective()"
+        toAst "PFSHashDirective"
     | SynModuleDecl.NestedModule(_,decls,_,range) -> 
         toAst "PFSNestedModule("
         visitDeclarations decls
+        toAst ")"
+    | SynModuleDecl.DoExpr(i1,i2,i3) -> 
+        // i2 is expr of type SynExpr.Do -> We get something like PFSDoExpr(PFSDo(..))
+        toAst "PFSDoExpr("
+        visitSynExpr i2
         toAst ")"
     | _ -> () /// printfn " - not supported declaration: %A" declaration
 
@@ -320,16 +337,25 @@ and visitDeclarations decls =
 
 and visitMemberDefinitions memDefns =
   let mutable counter = 0
+  let mutable skip = false
   for synMemberDefn in memDefns do
     match synMemberDefn with
-    | SynMemberDefn.ImplicitCtor(_,_,_,_,_) -> toAst ignore
-    | SynMemberDefn.NestedType(synTypeDefn,synAccess, range) -> ()
+    | SynMemberDefn.ImplicitCtor(i1,i2,i3,i4,i5) -> 
+        //toAst ignore
+        skip <- true
+        ()
+    | SynMemberDefn.ImplicitInherit(i1,i2,i3,i4) -> 
+        toAst "SynMemberDefn("
+        visitSynExpr i2
+        toAst ")"
     | SynMemberDefn.Member(synBinding, range) ->
-        toAst "PFSMember("
+        toAst "PFSMember"
+        toAst "("
         let (Binding(access, kind, inlin, mutabl, attrs, xmlDoc, data, pat, retInfo, body, m, sp)) = synBinding
         visitSynExpr body
         toAst ")"
-    | SynMemberDefn.LetBindings(synBindingList, _,_, range) -> ()
+    | SynMemberDefn.LetBindings(synBindings, _,_, range) -> 
+        toAst "PFSLetBindings"
     | SynMemberDefn.Open(longIdent,range) ->
         addToOutput "open"
     | SynMemberDefn.Interface(synType, synMemberDefnsInnerOpt,_)->
@@ -338,20 +364,19 @@ and visitMemberDefinitions memDefns =
         | Some synMemberDefnsInnerOpt -> visitMemberDefinitions synMemberDefnsInnerOpt
         | None -> ()
         toAst ")"
-    | _ -> ()
+    | _ -> 
+        toAst "SynMemberDefn something else"
+
     counter <- counter + 1
-    if memDefns.Length <> counter then
+    if ((not skip) && memDefns.Length <> counter) then
       toAst ","
+    skip <- false
 
-
-and extractImplementationFileDetails tree =
-    // Extract implementation file details
-    let mutable result = ""
-    match tree with
-    | ParsedInput.ImplFile(implFile) ->
+and traverseTree tree =
+     match tree with
+     | ParsedInput.ImplFile(implFile) ->
         // Extract declarations and walk over them
         let (ParsedImplFileInput(fn, script, name, _, _, modules, _)) = implFile
         visitModulesAndNamespaces modules
-        //printf "%s" output
-        | _ -> failwith "F# Interface file (*.fsi) not supported."
-
+        //printf "%s" output  
+     | _ -> failwith "F# Interface file (*.fsi) not supported."
