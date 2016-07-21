@@ -1,15 +1,80 @@
-module Display
+#light "off"
 
-open System
-open System.ComponentModel
-open System.Data
-open System.Drawing 
-open System.Text
-open System.Windows.Forms
-open System.IO
-open Support.Helper
-open Printf
+nalysisEngine() =  begin
+interface IAnalysisEngine with 
+      member x.DoSequentialAnalysis2() =
+            let rec engine = 
+              { new AnalysisProcess() with
+                  member x.Start() = Task.Factory.StartNew(analysis) |> ignore
+                  member x.TryCancel() = () end }
 
+            and analysis() =
+                let nyseData = loadNyseData() in
+                engine.TriggerLoadNyseData(nyseData);
+                let nasdaqData = loadNasdaqData() in
+                engine.TriggerLoadNasdaqData(nasdaqData);
 
-let getExecutionResult sampleOption = 
-	for i in 1 do 2
+                let mergedMarketData = mergeMarketData [ nyseData; nasdaqData ] in
+                engine.TriggerMergeMarketData(mergedMarketData);
+                let normalizedMarketData = normalizeData mergedMarketData in
+                engine.TriggerNormalizeMarketData(normalizedMarketData);
+                let analyzedStockData = analyzeData normalizedMarketData in
+                engine.TriggerAnalyzeMarketData(analyzedStockData);
+            
+                let fedHistoricalData = loadFedHistoricalData() in
+                engine.TriggerLoadFedHistoricalData(fedHistoricalData);
+                let normalizedHistoricalData = normalizeData fedHistoricalData in
+                engine.TriggerNormalizeHistoricalData(normalizedHistoricalData);
+                let analyzedHistoricalData = analyzeData normalizedHistoricalData in
+                engine.TriggerAnalyzeHistoricalData(analyzedHistoricalData);
+            
+                let modeledMarketData = runModel analyzedStockData in
+                engine.TriggerModelMarketData(modeledMarketData);
+                let modeledHistoricalData = runModel analyzedHistoricalData in
+                engine.TriggerModelHistoricalData(modeledHistoricalData);
+                let recommendation = compareModels [ modeledMarketData; modeledHistoricalData ] in
+                engine.TriggerCompareModels(Some recommendation) in
+            engine
+
+        member x.DoAsyncAnalysis() =
+            let cts = new CancellationTokenSource() in
+            let rec engine = 
+              { new AnalysisProcess() with
+                  member x.Start() = 
+                      Async.Start(compare, cancellationToken = cts.Token)
+                  member x.TryCancel() = cts.Cancel() end }
+            and marketModel = async {
+                let! nyse = 
+                  asyncLoadNyseData() 
+                  |> Async.WithResult engine.TriggerLoadNyseData |> Async.StartChild in
+                let! nasdaq = 
+                  asyncLoadNasdaqData() 
+                  |> Async.WithResult engine.TriggerLoadNasdaqData |> Async.StartChild in
+
+                let! nyseData = nyse in
+                let! nasdaqData = nasdaq in
+                let merged = mergeMarketData [ nyseData; nasdaqData ] in
+                engine.TriggerMergeMarketData(merged);
+
+                let! normalized = asyncNormalizeData merged in
+                engine.TriggerNormalizeMarketData(normalized);
+                let! analyzed = asyncAnalyzeData normalized  in
+                engine.TriggerAnalyzeMarketData(analyzed);
+                let! res = asyncRunModel analyzed in
+                engine.TriggerModelMarketData(res);
+                return res }
+
+            and historicalModel = async {
+                let! fed = asyncLoadFedHistoricalData() in
+                engine.TriggerLoadFedHistoricalData(fed);
+
+                let! normalized = asyncNormalizeData fed in
+                engine.TriggerNormalizeHistoricalData(normalized);
+                let! analyzed = asyncAnalyzeData normalized in
+                engine.TriggerAnalyzeHistoricalData(analyzed);
+                let! res = asyncRunModel analyzed in
+                engine.TriggerModelHistoricalData(res);
+                return res } in
+            engine
+end
+end

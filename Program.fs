@@ -17,32 +17,32 @@ let IsSubLet (letDecl : LetDeclaration) (list : List<LetDeclaration>) =
 
 let mutable AllTopLevelLets : List<LetDeclaration> = List.empty<LetDeclaration>
 
-let visitAST () =
-    let filepath = "input.fsharp"
+let extractSingle (filepath, outfile) =
     let input = File.ReadAllText(filepath)
-
-    // Get the AST of sample F# code
-    let tree = GetAST.getUntypedTree(filepath,"/home/user/dummy.fsx", input) 
+     
+    let tree = GetAST.getUntypedTree(filepath, "/home/user/dummy.fsx", input) 
     let test = GetAST.traverseTree tree
 
-    printf "%s" GetAST.astOutput
+    File.WriteAllText(outfile, GetAST.astOutput)
 
 let extractLetModules filePath =
     GetAST.reset ()
 
     let input = File.ReadAllText(filePath)
-    let test = GetAST.traverseTree (GetAST.getUntypedTree(filePath, filePath, input))
+    let test = GetAST.traverseTree (GetAST.getUntypedTree(filePath, "/home/user/dummy.fsx", input))
 
     for letDecl in GetAST.LetDeclarations do
         if (IsSubLet letDecl AllTopLevelLets) = false then
             AllTopLevelLets <- letDecl :: AllTopLevelLets
     ()
 
-let extractFromAll () =
-    let fs = getAllFilePaths "/Users/mkubicek/Dropbox/Uni/FSharp/FSharpDemoCode" "*.fs"
-    let fsx = getAllFilePaths "/Users/mkubicek/Dropbox/Uni/FSharp/FSharpDemoCode" "*.fsx"
-    let allFSharpFilePaths = Seq.append fs fsx
-    for filePath in allFSharpFilePaths do extractLetModules(filePath)
+let extractAllLetDecl (inputpath, outfile) =
+    if Directory.Exists (inputpath) then
+        let fs = getAllFilePaths inputpath "*.fs"
+        let fsx = getAllFilePaths inputpath "*.fsx"
+        let allFSharpFilePaths = Seq.append fs fsx
+        for filePath in allFSharpFilePaths do extractLetModules (filePath)
+    else extractLetModules (inputpath)
 
     let mutable outputString = ""
 
@@ -53,20 +53,19 @@ let extractFromAll () =
         outputString <- outputString + "ModuleLevel: #(" + topLevelLet.IsModuleLevel.ToString() + ")#" + Environment.NewLine
         outputString <- outputString + Environment.NewLine
 
-    File.WriteAllText("out.txt", outputString)
+    File.WriteAllText(outfile, outputString)
     ()
 
 [<EntryPoint>]
 let main argv = 
-    visitAST ()
-    //extractFromAll()
-    0 // return an integer exit code
+    let errorMessage = "Called with wrong parameters. Sample usage: 'FSharpASTExtractor.exe simple <inputFile> <outputFile>' or 'FSharpASTExtractor.exe extended <inputDirectoryOrFile> <outputFile>'" 
 
-
-
-
-
-
-
-
-
+    if argv.Length < 3 then 
+        printfn "%s" errorMessage
+    else
+        match argv.[0], argv.[1], argv.[2]  with
+        | "extendedLet", path, outFile -> extractAllLetDecl (path, outFile)
+        | "simple", filepath, outFile -> extractSingle (filepath, outFile)
+        | _ -> printfn "%s" errorMessage
+    
+    0
