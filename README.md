@@ -55,7 +55,7 @@ PFSSynModuleOrNamespace(PFSLet(PFSIfThenElse(PFSParen(PFSConst),PFSParen(PFSLetO
 ```
 FSharpASTExtractor.exe extendedLet inputPath out.txt
 ```
-Parse F# code from the file `input.fs`, output AST of largest present let bindings in file `out.txt`. Complex F# code input can be split into manageable pieces. Input paths resolving to a directory will be scanned recursively for .fs and .fsx F# code files and their parsing results will be accumulated in the `out.txt`.
+Extract just largest consecutive let bindings to the file `out.txt`. Complex F# code input can be split into manageable pieces. Input paths resolving to a directory will be scanned recursively for .fs and .fsx F# code files and their parsing results will be accumulated in the `out.txt`.
 
 #####Sample output:#####
 ```
@@ -63,4 +63,5 @@ File: #(./fsharp3sample-25592/SampleProviders/Samples.Hadoop/Helpers.fs)#
 Code: #(let theProxyProcessAgent = startProxyProcessAgent())#
 AST: #(PFSLet(PFSApp(PFSIdent(startProxyProcessAgent),PFSConst)))#
 ModuleLevel: #(True)#
+...
 ```
